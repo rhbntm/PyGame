@@ -1,133 +1,277 @@
-import random
 import pygame
+import sys
+import random
+from PIL import Image
+
 pygame.init()
+pygame.mixer.init()
 
-# Set up display
-screen_width = 800
-screen_height = 600
-screen = pygame.display.set_mode((screen_width, screen_height))
-pygame.display.set_caption("Matching Game")
 
-# Load images
-tile_images = {
-    '1.png': pygame.image.load('./images/1 (1).png'),
-    '2.png': pygame.image.load('./images/2 (1).png'),
-    '3.png': pygame.image.load('./images/3 (1).png'),
-    '4.png': pygame.image.load('./images/4 (1).png'),
-    '5.png': pygame.image.load('./images/5 (1).png'),
-    '6.png': pygame.image.load('./images/6 (1).png'),
-    '7.png': pygame.image.load('./images/7 (1).png'),
-    '8.png': pygame.image.load('./images/8 (1).png'),
-    # Add more images as needed
+Width, Height = 600, 600
+screen = pygame.display.set_mode((Width, Height))
+pygame.display.set_caption("MATHching Game")
+clock = pygame.time.Clock()
+White = (255, 255, 255)
+Black = (0, 0, 0)
+Gray = (128, 128, 128)
+num_cards = 12
+cards = []
+selected_cards = []
+current_operation = "Addition"
+user_input = ''
+Easy = 120
+Medium = 60
+Hard = 30
+game_state = 'start'
+start_time = None
+
+
+
+correct_sound = pygame.mixer.Sound("Sounds/Correct.mp3")
+incorrect_sound = pygame.mixer.Sound("Sounds/pipe.mp3")
+lose = pygame.mixer.Sound("Sounds/Cat Laughing At You.mp3")
+win = pygame.mixer.Sound("Sounds/win.mp3")
+cheers = pygame.mixer.Sound("Sounds/cheers.mp3")
+applause = pygame.mixer.Sound("Sounds/applause.mp3")
+
+correct_sound.set_volume(0.9) 
+incorrect_sound.set_volume(0.05)  
+lose.set_volume(0.8)  
+win.set_volume(0.5)  
+cheers.set_volume(0.6)  
+applause.set_volume(0.6) 
+
+
+card_image = pygame.Surface((100, 140))
+card_image.fill(White)
+
+
+def add(a, b):
+    return a + b
+
+
+operations = {
+    "Addition": add,
 }
 
-# Initialize game board
-game_board = [['' for _ in range(4)] for _ in range(4)]
-
-def render_board(game_board):
-    tile_width = 30
-    tile_height = 30
-    padding_x = 70 # Horizontal padding between tiles
-    padding_y = 70  # Vertical padding between tiles
-    
-    for i in range(len(game_board)):
-        for j in range(len(game_board[0])):
-            tile = game_board[i][j]
-            tile_image = tile_images[tile]  # Get the corresponding image
-            x = j * (tile_width + padding_x)
-            y = i * (tile_height + padding_y)
-            screen.blit(tile_image, (x, y))
 
 
+def initialize_cards():
+    numbers = random.sample(range(1, 100), num_cards)
+    for i in range(num_cards):
+        pos = (i % 4 * 120 + 70, i // 4 * 150 + 50)
+        card_data = {
+            'number': numbers[i],
+            'pos': pos,
+            'flipped': False,
+            'rect': pygame.Rect(pos[0], pos[1], 100, 140)
+        }
+        cards.append(card_data)
 
+def draw_text(text, pos, font_size=32, color=Black):
+    font = pygame.font.Font(None, font_size)
+    text_surface = font.render(text, True, color)  
+    text_rect = text_surface.get_rect(center=pos)
+    screen.blit(text_surface, text_rect)
 
-# Get list of image filenames
-images = list(tile_images.keys())
+initialize_cards()
 
-# Shuffle and duplicate images to create pairs
-random.shuffle(images)
-pairs = images + images
-print("Length of pairs:", len(pairs))  # Debug print
-for i in range(4):
-    for j in range(4):
-        if pairs:
-            game_board[i][j] = pairs.pop()
+def handle_input(event):
+    global user_input, game_state, selected_cards, difficulty
+    if game_state == 'start':
+        if event.key == pygame.K_e:
+            difficulty = Easy
+            game_state = 'main_game'
+        elif event.key == pygame.K_m:
+            difficulty = Medium
+            game_state = 'main_game'
+        elif event.key == pygame.K_h:
+            difficulty = Hard
+            game_state = 'main_game'
+    elif game_state == 'main_game' or game_state == 'answer_question':
+        if event.key == pygame.K_BACKSPACE:
+            user_input = user_input[:-1]
+        elif event.key == pygame.K_RETURN:
+            num1 = selected_cards[0]['number']
+            num2 = selected_cards[1]['number']
+            result = operations[current_operation](num1, num2)
+            pygame.mixer.stop()
+            pygame.mixer.Sound.play(correct_sound)
+            if user_input.strip() == str(result).strip():
+                pygame.display.flip()
+                user_input = ''
+                selected_cards = []
+                game_state = 'main_game'
+                check_win_condition()  
+            else:
+                pygame.display.flip()
+                user_input = ''  
+                pygame.mixer.stop()
+                pygame.mixer.Sound.play(incorrect_sound)    
         else:
-            break  # Exit the loop if there are no more elements in pairs
+
+            if event.unicode.isdigit():
+                user_input += event.unicode
+            
+def draw_backgrounds():
+    top_menu = pygame.draw.rect(screen, Black, [0, 0, Width, 100], )
+    bottom_menu = pygame.draw.rect(screen, Black, [0, Height - 100, Width, 100],)
 
 
-matched_tiles = set()
-selected_tiles = []
-last_selected_position = None
 
-def handle_click(row, col):
-    global selected_tiles
-    global last_selected_position
-    
-    # Check if the clicked tile is already matched
-    if (row, col) in matched_tiles:
-        print("This tile is already matched!")
-        return
-    
-    # Check if the clicked position is the same as the last selected position
-    if (row, col) == last_selected_position:
-        print("You cannot select the same position again!")
-        return
-    
-    # Handle logic for when a tile is clicked
-    clicked_tile = game_board[row][col]
-    
-    # Add the clicked tile to the selected tiles list
-    selected_tiles.append((row, col))
-    
-    # Check if two tiles are selected
-    if len(selected_tiles) == 2:
-        # Get the row and column of the two selected tiles
-        row1, col1 = selected_tiles[0]
-        row2, col2 = selected_tiles[1]
+
+def draw_timer(game_state):
+    global start_time
+    if game_state == 'main_game' or game_state == 'answer_question':
+        if start_time is None:
+            start_time = pygame.time.get_ticks() // 1000  
+
+        timer_font = pygame.font.Font(None, 36)
+        timer_x, timer_y = Width // 2 - 60, 16
+
+        current_time = pygame.time.get_ticks() // 1000
+        elapsed_time = (difficulty - (current_time - start_time))  
         
-        # Get the tiles at the selected positions
-        tile1 = game_board[row1][col1]
-        tile2 = game_board[row2][col2]
-        
-        # Check if the tiles have different positions and match
-        if (row1, col1) != (row2, col2) and tile1 == tile2:
-            print("Matched!")
-            # Keep the tiles selected
-            matched_tiles.add((row1, col1))
-            matched_tiles.add((row2, col2))
-            selected_tiles = []  # Reset the selected tiles list
-        else:
-            print("Not matched!")
-            # Deselect the tiles
-            selected_tiles = []
-    elif len(selected_tiles) > 2:
-        print("You can only select two tiles at a time!")
-        # Reset the selected tiles list
-        selected_tiles = []
-    else:
-        print("Selected tile:", clicked_tile)
+        timer_surface = timer_font.render(f"Time: {elapsed_time} s", True, [0, 0, 0])
+        screen.blit(timer_surface, (timer_x, timer_y))
+
+        if elapsed_time <= 0:
+            print("Elapsed time is zero. Changing game state to 'finished'")  
+            return 'finished'  
+    return game_state  
+
+
+
+def check_win_condition():
+    global game_state
+    all_matched = all(card['flipped'] for card in cards)
+    if all_matched:
+        pygame.mixer.Sound.play(win)
+        game_state = 'win'
+
+
+gif_path = "Assets/omedetou.gif"
+gif_image = Image.open(gif_path)
+frames = []
+try:
+    while True:
+        frame = gif_image.copy()
+        frames.append(frame)
+        gif_image.seek(gif_image.tell() + 1)
+except EOFError:
+    pass
     
-    # Update the last selected position
-    last_selected_position = (row, col)
+pygame_frames = [pygame.image.fromstring(frame.tobytes(), frame.size, frame.mode).convert() for frame in frames]
 
 
-# Main game loop
+def display_gif(frames, position, size):
+    frame_index = 0
+    user_clicked = False
+    screen.fill(Gray)
+    while not user_clicked:
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                pygame.quit()  
+                sys.exit()
+
+            if event.type == pygame.MOUSEBUTTONDOWN:
+                user_clicked = True  
+                break  
+
+        resized_frame = pygame.transform.scale(frames[frame_index], size)
+        screen.blit(resized_frame, position)
+        print("Frame Index:", frame_index)
+        frame_index = (frame_index + 1) % len(frames)
+        draw_text('Congratulations you won!!!', (Width // 2, Height // 2), color=[0, 255, 0], font_size=60)
+        draw_text('Click to play again', (Width // 2, Height // 2 + 50), color=Black, font_size=60)
+        pygame.display.flip()
+        clock.tick(15)
+    
+    return True
+
 running = True
-tile_width = 100
-tile_height = 100
 while running:
     for event in pygame.event.get():
         if event.type == pygame.QUIT:
             running = False
-        elif event.type == pygame.MOUSEBUTTONDOWN:
-            mouse_x, mouse_y = pygame.mouse.get_pos()
-            clicked_row = mouse_y // tile_height
-            clicked_col = mouse_x // tile_width
-            handle_click(clicked_row, clicked_col)
+        elif event.type == pygame.KEYDOWN and (game_state == 'start' or game_state == 'main_game' or game_state == 'answer_question'):
+            handle_input(event)
+        elif event.type == pygame.MOUSEBUTTONDOWN and game_state == 'main_game':
+            for card in cards:
+                if card['rect'].collidepoint(event.pos) and not card['flipped']:
+                    card['flipped'] = True
+                    selected_cards.append(card)
+                    if len(selected_cards) == 2:
+                        game_state = 'answer_question'
 
-    # Update display
-    render_board(game_board)
+    screen.fill(Gray)
+    if game_state == 'start':
+        pygame.mixer.stop()
+        draw_backgrounds()
+        draw_text('MATHching', (Width // 2 + 10, Height - 550), font_size = 69, color=White)
+        draw_text('Choose Difficulty:', (Width // 2, Height // 2 - 150), font_size=43)
+        draw_text('Press E for Easy', (Width // 2, Height // 2 - 30))
+        draw_text('Press M for Medium', (Width // 2, Height // 2 + 20))
+        draw_text('Press H for Hard', (Width // 2, Height // 2 + 70))
+    
+    elif game_state == 'main_game' or game_state == 'answer_question':
+        bottom_menu = pygame.draw.rect(screen, Black, [0, Height - 100, Width, 100])
+        for card in cards:
+            if card['flipped']:
+                draw_text(str(card['number']), (card['rect'].centerx, card['rect'].centery))
+            else:
+                screen.blit(card_image, card['rect'].topleft)
+
+        if game_state == 'answer_question':
+            question = f"What is {selected_cards[0]['number']} + {selected_cards[1]['number']}? {user_input}"
+            draw_text(question, (Width // 2 - 15, Height - 50), color=White)
+
+    elif game_state == 'finished':
+        pygame.mixer.stop()
+        pygame.mixer.Sound.play(lose)
+        car = pygame.image.load("assets/point.webp")
+        car = pygame.transform.scale(car, (600, 600))
+        screen.blit(car, (0, 0))
+
+        draw_text('You lost!' , (Width // 2, Height // 2), color=[255, 0, 0], font_size=60)
+        draw_text('Click to play again', (Width // 2, Height // 2 + 50), font_size=60)
+        pygame.display.flip()
+        
+        waiting_for_restart = True
+        while waiting_for_restart:
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    pygame.quit()  
+                    sys.exit()
+
+                if event.type == pygame.MOUSEBUTTONDOWN:
+ 
+                    selected_cards = []  
+                    cards = [] 
+                    initialize_cards()
+                    game_state = 'start'
+                    start_time = None 
+                    waiting_for_restart = False
+
+    elif game_state == 'win':
+        print("Before")
+        pygame.mixer.stop()
+        pygame.mixer.Sound.play(win)
+        pygame.mixer.Sound.play(cheers)
+        pygame.mixer.Sound.play(applause)
+
+        gif_displayed = display_gif(pygame_frames, (0, 0), (600, 600))
+        if gif_displayed:
+            print("After")
+
+            selected_cards = []  
+            cards = []  
+            initialize_cards()
+            game_state = 'start'
+            start_time = None  
+
+    game_state = draw_timer(game_state)  
     pygame.display.flip()
 
 pygame.quit()
+sys.exit()
